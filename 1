@@ -1,0 +1,64 @@
+
+    apt-get install iproute gcc
+    cd /root
+    wget https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/tb-tun/tb-tun_r18.tar.gz
+    tar -xf tb-tun_r18.tar.gz
+    gcc tb_userspace.c -l pthread -o tb_userspace
+    chmod 0777 /root/tb_userspace
+    Create a new init script
+    nano /etc/init.d/ipv6tb
+
+    and put in the following contents (after replacing the correct IP addresses, of course)
+    Remember, for the tunnel, your VPS IP is the client and the Hurricane Electric IP is the server.
+    #! /bin/sh
+     
+    ### BEGIN INIT INFO
+    # Provides:          ipv6
+    # Required-Start:    $local_fs $all
+    # Required-Stop:     $local_fs $network
+    # Default-Start:     2 3 4 5
+    # Default-Stop:      0 1 6
+    # Short-Description: starts the ipv6 tunnel 
+    # Description:       ipv6 tunnel start-stop-daemon
+    ### END INIT INFO
+     
+    # /etc/init.d/ipv6tb
+     
+    touch /var/lock/ipv6tb
+     
+    case "$1" in
+      start)
+        echo "Starting ipv6tb "
+          setsid /root/tb_userspace tb [Server IPv4 Address] [Client IPv4 Address] sit > /dev/null 2>&1 &
+          sleep 3s #ugly, but doesn't seem to work at startup otherwise
+          ifconfig tb up
+          ifconfig tb inet6 add [Client IPv6 Address from your Routed /64]::XXX/128 #Add as many of these as you need from your routed /64 allocation
+          ifconfig tb mtu 1480
+          route -A inet6 add ::/0 dev tb
+          route -A inet6 del ::/0 dev venet0
+        ;;
+      stop)
+        echo "Stopping ipv6tb"
+          ifconfig tb down
+          route -A inet6 del ::/0 dev tb
+          killall tb_userspace
+        ;;
+      *)
+        echo "Usage: /etc/init.d/ipv6tb {start|stop}"
+        exit 1
+        ;;
+    esac
+     
+    exit 0
+
+    Make it executable, and add it to startup –
+    chmod 0755 /etc/init.d/ipv6tb
+    update-rc.d ipv6tb defaults
+    Execute it right away –
+
+    /etc/init.d/ipv6tb start
+
+    OR simply reboot.
+
+    Test to confirm that IPv6 connectivity is working
+    ping6 -c 5 google.com
